@@ -1,5 +1,6 @@
-import { mkdir, writeFile, copyFile, rm } from "node:fs/promises";
+import { mkdir, readFile, writeFile, copyFile, rm } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
+import { createHash } from "node:crypto";
 import { pages } from "./pages.mjs";
 import { guides } from "./guides.mjs";
 import { fields, defaultRolls } from "./forms.mjs";
@@ -16,6 +17,45 @@ const isPreview = process.env.VERCEL_ENV === "preview";
 const verification = process.env.GOOGLE_SITE_VERIFICATION?.trim() || "";
 const publisherId = process.env.ADSENSE_PUBLISHER_ID?.trim().replace(/^ca-/, "") || "";
 if (publisherId && !/^pub-[0-9]{16}$/.test(publisherId)) throw new Error("ADSENSE_PUBLISHER_ID must be a Google publisher ID.");
+const readSource = (file) => readFile(new URL(file, import.meta.url), "utf8");
+function bundle(name, ext, content) {
+  const hash = createHash("sha256").update(content).digest("hex").slice(0,12);
+  return {file:`${name}-${hash}.${ext}`,content};
+}
+const calculatorAsset = bundle("calculations","mjs",await readSource("calculations.mjs"));
+const appAsset = bundle("app","mjs",(await readSource("app.mjs")).replace("./calculations.mjs","./"+calculatorAsset.file));
+const cssAsset = bundle("site","css",await readSource("site.css"));
+
+const observability = process.env.VERCEL_ENV === "production" && process.env.VERCEL_OBSERVABILITY_CLIENT_CONFIG
+  ? JSON.parse(process.env.VERCEL_OBSERVABILITY_CLIENT_CONFIG)
+  : {};
+const sameOriginPath = (path) => typeof path === "string" && /^\/[0-9a-z_./-]+$/i.test(path) && !path.startsWith("//");
+function trackingScript(config, endpointNames) {
+  if (!sameOriginPath(config?.scriptSrc)) return "";
+  const endpoints = endpointNames.filter(([key])=>sameOriginPath(config[key]))
+    .map(([key,attr])=>` data-${attr}="${config[key]}"`).join("");
+  return `<script defer src="${config.scriptSrc}"${endpoints}></script>`;
+}
+const analyticsScript = trackingScript(observability.analytics,[["viewEndpoint","view-endpoint"],["eventEndpoint","event-endpoint"]]);
+const speedScript = trackingScript(observability.speedInsights,[["endpoint","endpoint"]]);
+const telemetryMarkup = (analyticsScript || speedScript) ? `<script>
+  function rollledgerUrl(value) {
+    if (typeof value !== "string" || !value) return value;
+    try {
+      const url = new URL(value, location.origin);
+      url.search = "";
+      url.hash = "";
+      return url.href;
+    } catch { return ""; }
+  }
+  function rollledgerVitals(event) {
+    return { ...event, url: rollledgerUrl(event.url), ...(event.referrer ? {referrer:rollledgerUrl(event.referrer)} : {}) };
+  }
+  ${analyticsScript ? 'window.va = window.va || function () { (window.vaq = window.vaq || []).push(arguments); }; window.va("beforeSend", rollledgerVitals);' : ""}
+  ${speedScript ? 'window.si = window.si || function () { (window.siq = window.siq || []).push(arguments); }; window.si("beforeSend", rollledgerVitals);' : ""}
+</script>
+${analyticsScript}
+${speedScript}` : "";
 const siteId = origin + "/#website";
 const organizationId = origin + "/#publisher";
 const byMode = Object.fromEntries(pages.map((page) => [page.mode, page]));
@@ -51,8 +91,9 @@ ${!path && publisherId && !isPreview ? `<meta name="google-adsense-account" cont
 <meta property="og:type" content="${article ? "article" : "website"}"><meta property="og:title" content="${escape(title)} | RollLedger"><meta property="og:description" content="${escape(description)}"><meta property="og:url" content="${escape(origin + url(path))}">
 <meta property="og:image" content="${escape(origin)}/assets/social.png"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="RollLedger label roll calculators with a cross-section of a wound roll"><meta name="twitter:card" content="summary_large_image">
-<link rel="icon" href="/assets/favicon.png" type="image/png"><link rel="stylesheet" href="/assets/site.css">
-${interactive ? '<script type="module" src="/assets/app.mjs"></script>' : ""}
+<link rel="icon" href="/assets/favicon.png" type="image/png"><link rel="stylesheet" href="/assets/${cssAsset.file}">
+${interactive ? `<script type="module" src="/assets/${appAsset.file}"></script>` : ""}
+${path === "404" ? "" : telemetryMarkup}
 <script type="application/ld+json">${JSON.stringify({"@context":"https://schema.org","@graph":schema}).replace(/</g, "\\u003c")}</script></head>
 <body>${header()}<main id="main">${markup}</main>${footer()}</body></html>`;
 }
@@ -145,7 +186,8 @@ function infoMarkup(title, description, content) {
 const privacyText = `<h2>Calculator inputs</h2><p>Calculations run in your browser. If you choose to send a label estimate to the print-run planner, the number passes between pages through session storage and is cleared after use. A query-parameter fallback is used when session storage is unavailable.</p>
 <h2>Downloads</h2><p>CSV exports are created on your device from the calculator result. We recommend removing any internal order details before sharing an export or posting a question publicly.</p>
 <h2>Hosting and external links</h2><p>Vercel may process routine request information, including IP addresses and browser information, to deliver and protect the site. External links have their own privacy policies.</p>
-<h2>Advertising and analytics</h2><p>RollLedger currently runs without ad scripts or third-party analytics. Calculator inputs are processed in your browser. If advertising is introduced, this page will describe the provider’s cookies and data use and explain the available privacy controls.</p>
+<h2>Site analytics and performance</h2><p>When enabled on production, Vercel Web Analytics measures page visits and Vercel Speed Insights measures page performance, such as load and response time. Vercel may process the page path, referrer, approximate location, browser and device information. RollLedger does not send calculator fields or CSV content to these services. See the <a href="https://vercel.com/docs/analytics/privacy-policy">Web Analytics privacy details</a> and the <a href="https://vercel.com/docs/speed-insights/privacy-policy">Speed Insights privacy details</a>.</p>
+<h2>Advertising</h2><p>RollLedger currently runs without advertising scripts. If advertising is introduced, this page will describe the provider’s cookies and data use and explain the available privacy controls.</p>
 <h2>Contact</h2><p>Use the <a href="/contact">contact page</a> for questions about this policy.</p>`;
 
 await mkdir(dist+"/assets",{recursive:true});
@@ -184,4 +226,7 @@ if (publisherId && !isPreview) {
 const publicPaths = ["",...pages.map((p)=>p.path),...guides.map((g)=>g.path),...infoPages.map(([path])=>path)];
 await writeFile(dist+"/robots.txt",isPreview ? "User-agent: *\nDisallow: /\n" : `User-agent: *\nAllow: /\nSitemap: ${origin}/sitemap.xml\n`);
 await writeFile(dist+"/sitemap.xml",`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${publicPaths.map((p)=>`  <url><loc>${escape(origin+url(p))}</loc></url>`).join("\n")}\n</urlset>\n`);
-for (const f of ["calculations.mjs","app.mjs","site.css","favicon.png","social.png"]) await copyFile(new URL(f,import.meta.url), dist+"/assets/"+f);
+for (const asset of [calculatorAsset,appAsset,cssAsset]) {
+  await writeFile(dist+"/assets/"+asset.file,asset.content);
+}
+for (const f of ["favicon.png","social.png"]) await copyFile(new URL(f,import.meta.url),dist+"/assets/"+f);
