@@ -6,6 +6,13 @@ if (form) {
   const output = document.querySelector("#result");
   const error = document.querySelector("#form-error");
   const transfer = document.querySelector("#transfer");
+  const rollEntries = document.querySelector("#roll-entries");
+  const addRoll = document.querySelector("#add-roll");
+  const rollLimit = document.querySelector("#roll-limit");
+  const batchPlan = document.querySelector("#batch-plan");
+  const exportPlan = document.querySelector("#export-plan");
+  const originalRollEntries = rollEntries ? Array.from(rollEntries.children, (row) => row.cloneNode(true)) : [];
+  let currentPlan = null;
   const unitInputs = Array.from(form.querySelectorAll('input[name="units"]'));
   let unit = unitInputs.find((input) => input.checked)?.value ?? "mm";
   let lastCount = null;
@@ -17,7 +24,9 @@ if (form) {
   };
 
   function display() {
-    const current = Object.fromEntries(new FormData(form));
+    const data = new FormData(form);
+    const current = Object.fromEntries(data);
+    if (rollEntries) current.rolls = data.getAll("rollStock");
     error.hidden = true;
     try {
       const result = calculate(mode, current, unit);
@@ -42,10 +51,28 @@ if (form) {
         dl.append(row);
       }
       output.replaceChildren(...items, dl, element("p", result.note, "result-note"));
+      if (batchPlan) {
+        currentPlan = result;
+        const rows = result.plan.map(({number,stock,used,left}) => {
+          const row = document.createElement("tr");
+          const numberCell = element("th", String(number));
+          numberCell.scope = "row";
+          row.append(numberCell, ...[stock,used,left].map(n=>element("td",n.toLocaleString("en-US"))));
+          return row;
+        });
+        batchPlan.querySelector("tbody").replaceChildren(...rows);
+        batchPlan.hidden = false;
+        exportPlan.hidden = false;
+      }
       return true;
     } catch (problem) {
       lastCount = null;
       if (transfer) transfer.hidden = true;
+      if (batchPlan) {
+        currentPlan = null;
+        batchPlan.hidden = true;
+        exportPlan.hidden = true;
+      }
       error.textContent = problem.message;
       error.hidden = false;
       output.replaceChildren(element("p", "Check your measurements to update the result.", "result-note"));
@@ -61,6 +88,10 @@ if (form) {
   });
   form.addEventListener("reset", () => {
     requestAnimationFrame(() => {
+      if (rollEntries) {
+        rollEntries.replaceChildren(...originalRollEntries.map(row => row.cloneNode(true)));
+        syncRollRows();
+      }
       unit = unitInputs[0]?.value ?? "mm";
       changeSuffixes();
       display();
@@ -68,8 +99,70 @@ if (form) {
   });
   form.addEventListener("input", (event) => {
     if (event.target.name === "units") return;
-    if (transfer) transfer.hidden = true;
+    clearExport();
   });
+  function clearExport() {
+    if (transfer) transfer.hidden = true;
+    if (exportPlan) {
+      currentPlan = null;
+      exportPlan.hidden = true;
+    }
+  }
+
+  function syncRollRows() {
+    const rows = Array.from(rollEntries.children);
+    rows.forEach((row,i) => {
+      const input = row.querySelector("input");
+      const label = row.querySelector("label");
+      const remove = row.querySelector("button");
+      input.id = "roll-" + (i+1);
+      label.htmlFor = input.id;
+      label.firstChild.textContent = "Roll " + (i+1);
+      remove.setAttribute("aria-label","Remove roll " + (i+1));
+      remove.disabled = rows.length === 1;
+    });
+    addRoll.disabled = rows.length === 12;
+    rollLimit.textContent = addRoll.disabled ? "The planner supports up to 12 rolls." : "";
+  }
+  if (rollEntries) {
+    syncRollRows();
+    addRoll.addEventListener("click", () => {
+      if (addRoll.disabled) return;
+      const row = originalRollEntries[0].cloneNode(true);
+      const input = row.querySelector("input");
+      input.value = "";
+      input.defaultValue = "";
+      rollEntries.append(row);
+      syncRollRows();
+      clearExport();
+      input.focus();
+    });
+    rollEntries.addEventListener("click", (event) => {
+      const remove = event.target.closest(".roll-remove");
+      if (!remove || remove.disabled) return;
+      const row = remove.closest(".roll-row");
+      const focusRow = row.nextElementSibling ?? row.previousElementSibling;
+      row.remove();
+      syncRollRows();
+      clearExport();
+      focusRow?.querySelector("input").focus();
+    });
+    exportPlan.addEventListener("click", () => {
+      if (!currentPlan) return;
+      const {plan,needed,stock,unmet} = currentPlan;
+      const lines = [["Labels required",needed],["Stock on hand",stock],["Stock shortfall",unmet],[],
+        ["Roll","On hand","Use","Left"],...plan.map(r=>[r.number,r.stock,r.used,r.left])];
+      const csv = lines.map(line=>line.join(",")).join("\r\n")+"\r\n";
+      const url = URL.createObjectURL(new Blob([csv], {type:"text/csv;charset=utf-8"}));
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "rollledger-print-plan.csv";
+      document.body.append(link);
+      link.click();
+      link.remove();
+      setTimeout(()=>URL.revokeObjectURL(url),1000);
+    });
+  }
   function changeSuffixes() {
     for (const suffix of form.querySelectorAll('[data-unit="dim"], [data-unit="mass"]')) suffix.textContent = unit;
   }

@@ -199,3 +199,59 @@ h1,h2{font-family:var(--display);font-weight:500;margin:0;line-height:.98;letter
   .overview dl > div + div { padding-top:10px; border-top:1px solid var(--line) }
   .guide-list a { padding:12px }
 }
+
+/* The controls and results share one surface at every width. */
+:root{--paper:#f7f4eb;--white:#fffdf6;--ink:#20352a;--pine:#1b3b30;--deep:#16352b}
+body{background-image:linear-gradient(180deg,#f0eadb 0,transparent 440px)}
+.site-head{background:#fbf9f1b3}
+.hero{grid-template-columns:1.2fr 1fr;gap:52px}
+.hero h1{max-width:620px;text-wrap:balance;line-height:.96}
+.hero h1 em{display:block}
+.hero .lede{max-width:460px}
+.hero-drawing{min-height:295px;box-shadow:0 12px 26px #20352a18}
+.diagram{height:202px;--d:177px}
+.calc-shell{border-radius:16px;box-shadow:0 12px 26px #20352a0d}
+.mode-switch{grid-template-columns:repeat(7,minmax(0,1fr));padding:9px;gap:5px;background:#eceee3}
+.mode-switch a{font-size:12px;padding:7px 6px}
+.calc-body form{padding:25px 26px 29px}
+.output{border-radius:11px;padding:20px 20px 13px}
+.output-label{color:var(--lime);font-size:11px}
+.result-caption{font-size:15px}
+.tool-grid{gap:12px;grid-template-columns:repeat(auto-fit,minmax(min(235px,100%),1fr))}
+.tool-card{min-height:115px;gap:7px;padding:16px 17px;border-radius:10px}
+.tool-category{color:#6b492e;font-size:11px;font-weight:750;letter-spacing:.055em;text-transform:uppercase}
+.tool-name{font-size:17px}
+.tool-description{font-size:14px}
+.batch-fields{border:0;padding:0;margin:22px 0 0;min-width:0}
+.batch-fields legend,.roll-row label{font-weight:680;font-size:13px}
+.batch-fields legend{margin-bottom:8px}
+#roll-entries{display:grid;gap:7px}
+.roll-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center}
+.roll-row label{display:grid;grid-template-columns:68px minmax(0,1fr);align-items:center;gap:7px}
+.roll-row input{width:100%;min-width:0;min-height:42px;padding:7px 8px;border:1px solid #c6cec1;border-radius:6px;background:#fafaf3;color:var(--ink);font-size:16px}
+.roll-remove{min-height:44px;padding:0 8px;background:transparent;border:1px solid var(--line);border-radius:6px;color:#863c29;cursor:pointer;font-size:12px}
+.roll-remove:disabled,.add-roll:disabled{opacity:.5;cursor:default}
+.add-roll{padding-inline:6px;margin-top:5px}
+#roll-limit{display:block;color:var(--muted)}
+#roll-limit:empty{display:none}
+.batch-plan{margin-top:14px;color:#eff5e5;overflow-x:auto}
+.batch-plan h3{margin:0 0 6px;font-size:14px}
+.batch-plan table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums;font-size:12px}
+.batch-plan tr{border-bottom:1px solid #ffffff26}
+.batch-plan th,.batch-plan td{padding:6px 4px;text-align:right}
+.batch-plan tr>:first-child{text-align:left}
+.batch-plan thead th{color:#c7dabf}
+@media(max-width:920px){.hero{gap:24px}.hero h1{font-size:clamp(48px,8.5vw,79px)}.hero-drawing{min-height:280px}.diagram{--d:165px}}
+@media(max-width:720px){
+  .hero{grid-template-columns:minmax(0,1fr);padding-block:24px 28px}
+  .hero h1{font-size:clamp(46px,9.5vw,66px);text-wrap:initial}
+  .hero h1 em{display:inline}
+  .hero h1 em::before{content:none}
+  .mode-switch{grid-template-columns:repeat(4,minmax(0,1fr));gap:4px;padding:6px}
+  .mode-switch a,.mode-switch a:nth-last-child(-n+2){grid-column:auto;padding:5px 3px}
+  .mode-switch a:last-child{grid-column:span 2}
+  .calc-body form{padding:16px}
+  .output{padding:17px 15px 10px}
+  .tool-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media(max-width:420px){.tool-grid{grid-template-columns:minmax(0,1fr)}.tool-card{min-height:0}.roll-row label{grid-template-columns:49px minmax(0,1fr)}}

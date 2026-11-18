@@ -40,6 +40,31 @@ export const pages = [
     related: ["reference", "weight", "fit"]
   },
   {
+    mode: "size", path: "label-roll-size-calculator", title: "Label roll diameter from label count", short: "Size a roll",
+    kicker: "ROLL DIAMETER", heading: "Calculate the diameter of a label roll",
+    sub: "Estimate the finished roll diameter for a target label count, core outside diameter, combined caliper and pitch.",
+    intent: "Use this to size a new roll when you know how many labels it needs to hold.",
+    example: "At 53 mm pitch and 0.16 mm combined caliper, 500 labels in one lane require 26.5 m of liner. On a 32 mm core the estimated finished roll diameter is 80.14 mm.",
+    measuring: "Use the outside diameter of the empty core and the complete stock thickness including liner. Allow some headroom below the printer’s maximum roll diameter.",
+    question: "What if the target is not divisible by the number of lanes?",
+    answer: "The tool rounds up to the next complete repeat. For 501 labels and two lanes, the roll needs 251 repeats and has 502 label positions.",
+    method: "Divide target labels by labels across and round up. Multiply by label pitch, add unused liner, then take the square root of core OD² + 4 × caliper × liner length ÷ π.",
+    link: "https://label.averydennison.com/na/en/home/customer-tools-na/roll-calculators.html",
+    source: "Avery Dennison roll geometry", related: ["diameter", "fit", "reference"]
+  },
+  {
+    mode: "batch", path: "multi-roll-label-planner", title: "Multi-roll label stock planner", short: "Combine rolls",
+    kicker: "MULTIPLE ROLLS", heading: "Plan a print run across partial rolls",
+    sub: "Enter the usable label count on each matching roll to see which rolls to use, how many labels to take, and whether stock falls short.",
+    intent: "Use this when your stock is split across several rolls of the same label size and material.",
+    example: "A 950-label job with a 5% buffer and 20 setup labels needs 1,018 labels. Rolls with 540, 470 and 180 labels together cover it and leave 172 labels on hand.",
+    measuring: "Estimate each roll with the reference or weight calculator. Record the roll number so the planned order still matches the physical rolls.",
+    question: "Why does it recommend the fullest rolls first?",
+    answer: "Taking the biggest available counts first covers the target with the fewest rolls. If you need to use a specific roll first, count that roll separately and plan the remainder here.",
+    method: "Add job labels, rounded-up buffer, and fixed setup waste. Sort the available rolls by usable count, then allocate labels from the fullest until the target is covered.",
+    related: ["reference", "weight", "run"]
+  },
+  {
     mode: "fit", path: "label-printer-roll-fit", title: "Label printer roll diameter and width checker", short: "Check printer fit",
     kicker: "PRINTER FIT", heading: "Label printer roll fit checker",
     measuring: "Use the media limits in the exact printer manual. Compare the full liner width and the diameter of the roll when new.",

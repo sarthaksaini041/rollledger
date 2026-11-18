@@ -84,6 +84,50 @@ export function calculate(mode, input, units = "mm") {
       note: extraNeeded <= available ? "Your entered stock covers this run, including setup and buffer." : "The rolls on hand fall short of your job target." };
   }
 
+  if (mode === "size") {
+    const core = dim("core", "empty core outside diameter");
+    const thickness = dim("thickness", "combined caliper");
+    const label = dim("label", "label length");
+    const gap = dim("gap", "label gap", true);
+    const lanes = count("lanes", "labels across");
+    const target = count("target", "target label count");
+    const waste = dim("waste", "unusable liner length", true);
+    const repeats = Math.ceil(target / lanes);
+    const length = repeats * (label + gap) + waste;
+    const diameter = Math.hypot(core, Math.sqrt(4 * thickness * length / Math.PI));
+    return {value: showDim(diameter), caption: "estimated finished roll diameter", fraction: null,
+      details: [["Web length", units === "in" ? fmt(length / 304.8, 2) + " ft" : fmt(length / 1000, 2) + " m"],
+        ["Complete repeats", fmt(repeats)], ["Label positions", quantity(repeats * lanes)]],
+      note: "Actual size varies with winding tension and caliper. Allow clearance before ordering or winding to a printer limit."};
+  }
+
+  if (mode === "batch") {
+    const job = count("job", "job label count");
+    const setup = count("setup", "setup labels", true);
+    const buffer = read("buffer", "buffer percentage", {zero:true});
+    assert(buffer <= 100, "Enter a buffer percentage between 0 and 100.");
+    assert(Array.isArray(input.rolls) && input.rolls.length >= 1 && input.rolls.length <= 12, "Enter one to twelve rolls.");
+    const rolls = input.rolls.map((raw, index) => {
+      const n = Number(raw);
+      assert(raw !== "" && Number.isInteger(n) && n >= 0 && n <= 1e9, "Enter a valid label count for roll " + (index + 1) + ".");
+      return {number:index+1, stock:n};
+    }).sort((a,b) => b.stock - a.stock || a.number - b.number);
+    const needed = job + setup + Math.ceil(job * buffer / 100);
+    let unmet = needed;
+    const plan = rolls.map(({number,stock}) => {
+      const used = Math.min(stock,unmet);
+      unmet -= used;
+      return {number, stock, used, left:stock-used};
+    });
+    const stock = rolls.reduce((sum, roll) => sum + roll.stock, 0);
+    const used = plan.filter((roll) => roll.used > 0).length;
+    return {value: fmt(used), caption: used === 1 ? "roll to use" : "rolls to use",
+      fraction: Math.min(stock/needed,1), plan, needed, stock, unmet,
+      details: [["Labels required", quantity(needed)], ["Stock on hand", quantity(stock)],
+        [unmet ? "Stock shortfall" : "Stock left after job", quantity(unmet || stock-needed)]],
+      note: unmet ? "All usable rolls together fall short of the target." : "Use the fullest rolls first to minimize the number of rolls opened."};
+  }
+
   if (mode === "fit") {
     const roll = dim("used", "roll outside diameter");
     const limit = dim("limit", "maximum roll diameter");

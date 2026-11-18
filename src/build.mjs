@@ -1,8 +1,8 @@
-import { mkdir, writeFile, copyFile } from "node:fs/promises";
+import { mkdir, writeFile, copyFile, rm } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { pages } from "./pages.mjs";
 import { guides } from "./guides.mjs";
-import { fields } from "./forms.mjs";
+import { fields, defaultRolls } from "./forms.mjs";
 import { calculate } from "./calculations.mjs";
 
 const dist = fileURLToPath(new URL("../dist/", import.meta.url));
@@ -14,6 +14,8 @@ if (!["https:", "http:"].includes(parsedOrigin.protocol) || parsedOrigin.usernam
 const origin = parsedOrigin.origin;
 const isPreview = process.env.VERCEL_ENV === "preview";
 const verification = process.env.GOOGLE_SITE_VERIFICATION?.trim() || "";
+const publisherId = process.env.ADSENSE_PUBLISHER_ID?.trim().replace(/^ca-/, "") || "";
+if (publisherId && !/^pub-[0-9]{16}$/.test(publisherId)) throw new Error("ADSENSE_PUBLISHER_ID must be a Google publisher ID.");
 const siteId = origin + "/#website";
 const organizationId = origin + "/#publisher";
 const byMode = Object.fromEntries(pages.map((page) => [page.mode, page]));
@@ -22,17 +24,19 @@ const url = (path = "") => `/${path}`;
 const brand = '<span class="brand-symbol" aria-hidden="true"><i></i><i></i><i></i></span><span>Roll<span class="brand-light">Ledger</span></span>';
 const circle = (cls) => `<span class="diagram-circle ${cls}"></span>`;
 const cards = {
-  reference: ["Reference roll", "Use the dimensions of a matching full roll when you don’t know the stock thickness.", "R"],
-  diameter: ["Roll diameter", "Calculate web length and label count when you know caliper, spacing and lanes.", "D"],
-  weight: ["Roll weight", "Estimate stock on a scale using a full roll and an empty core as references.", "W"],
-  run: ["Print run", "Check unopened rolls, setup labels and a job buffer against your stock.", "P"],
-  fit: ["Printer fit", "Compare roll diameter and web width against limits from your manual.", "F"]
+  reference: ["Reference roll", "Use a matching full roll when you don’t know the material thickness.", "Count stock"],
+  diameter: ["Roll diameter", "Use diameter, thickness and spacing to estimate liner length and label count.", "Count stock"],
+  weight: ["Roll weight", "Weigh a partial roll, a full roll and an empty core to estimate stock.", "Count stock"],
+  run: ["Print run", "Compare a job’s label count, setup waste and buffer with your stock.", "Plan a job"],
+  size: ["Finished roll size", "Work back from a label count to the finished roll diameter.", "Size a roll"],
+  batch: ["Multi-roll planner", "Allocate a job across partial rolls and download the plan.", "Plan a job"],
+  fit: ["Printer fit", "Compare roll diameter and liner width against your printer’s limits.", "Size a roll"]
 };
 function header() {
-  return `<a href="#main" class="skip">Skip to content</a><header class="site-head"><div class="wrap topbar"><a class="brand" href="/" aria-label="RollLedger home">${brand}</a><nav aria-label="Main navigation"><a href="/#calculator">Calculator</a><a href="/#tools">All tools</a><a href="/method">Measure</a></nav></div></header>`;
+  return `<a href="#main" class="skip">Skip to content</a><header class="site-head"><div class="wrap topbar"><a class="brand" href="/" aria-label="RollLedger home">${brand}</a><nav aria-label="Main navigation"><a href="/#calculator">Calculator</a><a href="/#tools">All tools</a><a href="/method">Guides</a></nav></div></header>`;
 }
 function footer() {
-  return `<footer class="site-foot"><div class="wrap bottom"><a href="/" class="brand" aria-label="RollLedger home">${brand}</a><span>Tools for print shops and shipping desks.</span><nav aria-label="Footer"><a href="/method">Method &amp; sources</a><a href="/privacy">Privacy</a></nav></div></footer>`;
+  return `<footer class="site-foot"><div class="wrap bottom"><a href="/" class="brand" aria-label="RollLedger home">${brand}</a><span>Tools for print shops and shipping desks.</span><nav aria-label="Footer"><a href="/about">About</a><a href="/contact">Contact</a><a href="/privacy">Privacy</a></nav></div></footer>`;
 }
 function layout({path = "", title, description, markup, schema = [], indexable = true, article = false, interactive = false}) {
   return `<!doctype html>
@@ -42,6 +46,7 @@ function layout({path = "", title, description, markup, schema = [], indexable =
 <link rel="canonical" href="${escape(origin + url(path))}"><meta name="theme-color" content="#f8f5ed">
 ${!indexable || isPreview ? '<meta name="robots" content="noindex, follow">' : ""}
 ${!path && verification && !isPreview ? `<meta name="google-site-verification" content="${escape(verification)}">` : ""}
+${!path && publisherId && !isPreview ? `<meta name="google-adsense-account" content="ca-${publisherId}">` : ""}
 <meta property="og:site_name" content="RollLedger"><meta property="og:locale" content="en_US">
 <meta property="og:type" content="${article ? "article" : "website"}"><meta property="og:title" content="${escape(title)} | RollLedger"><meta property="og:description" content="${escape(description)}"><meta property="og:url" content="${escape(origin + url(path))}">
 <meta property="og:image" content="${escape(origin)}/assets/social.png"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630">
@@ -54,9 +59,9 @@ ${interactive ? '<script type="module" src="/assets/app.mjs"></script>' : ""}
 function hero(page) {
   if (page) return `<section class="subhero wrap"><nav class="crumb" aria-label="Breadcrumb"><a href="/">Home</a><span aria-hidden="true">/</span><span>${escape(page.short)}</span></nav><p class="eyebrow"><span></span>${escape(page.kicker)}</p><h1>${escape(page.heading)}</h1><p>${escape(page.sub)}</p></section>`;
   return `<section class="hero wrap">
-    <div class="hero-content"><p class="eyebrow"><span></span>LABEL INVENTORY TOOLS</p><h1>Label roll<br><em>calculators</em></h1>
-      <p class="lede">Estimate how many labels are left on a roll. Check printer fit and make sure your stock covers the next print run.</p>
-      <div class="hero-actions"><a class="button primary" href="#calculator">Open calculator <span aria-hidden="true">↓</span></a><a class="text-link" href="#tools">Browse all tools <span aria-hidden="true">→</span></a></div></div>
+    <div class="hero-content"><p class="eyebrow"><span></span>FOR PRINT SHOPS &amp; SHIPPING DESKS</p><h1>Label roll <em>calculators</em></h1>
+      <p class="lede">Count the labels you have, size the roll you need, and plan the next print run down to the last roll.</p>
+      <div class="hero-actions"><a class="button primary" href="#calculator">Open calculator <span aria-hidden="true">↓</span></a><a class="text-link" href="#tools">Browse seven tools <span aria-hidden="true">→</span></a></div></div>
     <figure class="hero-drawing"><div class="drawing-top"><span><b></b> ROLL CROSS-SECTION</span></div>
       <div class="diagram" role="img" aria-label="Concentric circles showing a full label roll, the smaller partial roll and its empty core.">
         ${circle("full-ring")}${circle("partial-ring")}${circle("winding-ring")}${circle("winding-inner")}${circle("core-ring")}
@@ -74,27 +79,36 @@ function resultMarkup(result) {
     ${result.fraction === null ? "" : `<div class="meter" aria-hidden="true"><span style="width:${Math.min(100, Math.max(0,result.fraction*100))}%"></span></div>`}
     <dl>${result.details.map(([k,v])=>`<div><dt>${escape(k)}</dt><dd>${escape(v)}</dd></div>`).join("")}</dl><p class="result-note">${escape(result.note)}</p>`;
 }
+function rollEntry(value, number) {
+  return `<div class="roll-row"><label for="roll-${number}">Roll ${number}<input id="roll-${number}" name="rollStock" type="number" min="0" step="1" inputmode="numeric" value="${value}" required></label><button class="roll-remove" type="button" aria-label="Remove roll ${number}">Remove</button></div>`;
+}
+function planMarkup(plan) {
+  return `<div class="batch-plan" id="batch-plan"><h3>Roll-by-roll plan</h3><table><caption class="sr-only">Usage and remaining labels for each roll</caption><thead><tr><th scope="col">Roll</th><th scope="col">On hand</th><th scope="col">Use</th><th scope="col">Left</th></tr></thead>
+    <tbody>${plan.map((r)=>`<tr><th scope="row">${r.number}</th><td>${r.stock.toLocaleString("en-US")}</td><td>${r.used.toLocaleString("en-US")}</td><td>${r.left.toLocaleString("en-US")}</td></tr>`).join("")}</tbody></table></div>`;
+}
 function calculator(mode) {
   const page = byMode[mode];
   const isDim = fields[mode].some((f) => f.unit === "dim");
   const isMass = mode === "weight";
-  const defaultResult = calculate(mode, Object.fromEntries(fields[mode].map((f)=>[f.key,f.value])));
+  const defaultResult = calculate(mode, {...Object.fromEntries(fields[mode].map((f)=>[f.key,f.value])),rolls:defaultRolls});
   return `<section class="calc-section wrap" id="calculator"><div class="section-intro"><div><h2>${mode === "reference" ? "Estimate labels remaining" : escape(page.short)}</h2></div><a class="text-link guidance" href="/method">How to measure <span aria-hidden="true">→</span></a></div>
     <div class="calc-shell"><nav class="mode-switch" aria-label="Calculation modes">${pages.map((p)=>`<a href="${url(p.path)}#calculator" ${p.mode === mode ? 'aria-current="page"' : ""}>${escape(p.short)}</a>`).join("")}</nav>
       <div class="calc-body"><form data-mode="${mode}" data-planner="${url(byMode.run.path)}#calculator" novalidate>
         <div class="form-head"><div><p>${escape(page.intent)}</p></div>
         ${isDim || isMass ? `<fieldset class="units"><legend class="sr-only">${isDim ? "Measurements" : "Weights"}</legend>${(isDim ? ["mm","in"] : ["g","oz"]).map((u,i)=>`<label><input type="radio" name="units" value="${u}" ${i === 0 ? "checked" : ""}><span>${u}</span></label>`).join("")}</fieldset>` : ""}</div>
         <div class="grid-fields">${fields[mode].map((f)=>`<div class="field"><label for="f-${f.key}">${escape(f.label)}</label><div class="input-frame"><input id="f-${f.key}" name="${f.key}" type="number" step="any" min="0" inputmode="decimal" value="${f.value}" aria-describedby="hint-${f.key}" required><span data-unit="${f.unit}">${f.unit === "dim" ? "mm" : f.unit === "mass" ? "g" : f.unit}</span></div><small id="hint-${f.key}">${escape(f.hint)}</small></div>`).join("")}</div>
+        ${mode === "batch" ? `<fieldset class="batch-fields"><legend>Labels on each roll</legend><div id="roll-entries">${defaultRolls.map((r,i)=>rollEntry(r,i+1)).join("")}</div><button class="button tertiary add-roll" id="add-roll" type="button">+ Add roll</button><small id="roll-limit" role="status"></small></fieldset>` : ""}
         <p class="form-error" id="form-error" role="alert" hidden></p><div class="form-actions"><button class="button primary" type="submit">Calculate <span aria-hidden="true">→</span></button><button type="reset" class="button tertiary">Reset example</button></div>
         <noscript><p>Enable JavaScript to calculate with your measurements. The default example is shown beside the form.</p></noscript>
       </form>
       <aside class="output" aria-label="Calculation result" tabindex="-1"><p class="output-label"><span></span> CALCULATION RESULT</p><div id="result" aria-live="polite">${resultMarkup(defaultResult)}</div>
-      ${typeof defaultResult.remaining === "number" ? '<button type="button" id="transfer" class="transfer" hidden>Use count in print run <span aria-hidden="true">→</span></button>' : ""}</aside></div></div></section>`;
+      ${typeof defaultResult.remaining === "number" ? '<button type="button" id="transfer" class="transfer" hidden>Use count in print run <span aria-hidden="true">→</span></button>' : ""}
+      ${mode === "batch" ? `${planMarkup(defaultResult.plan)}<button id="export-plan" type="button" class="transfer" hidden>Download plan as CSV <span aria-hidden="true">↓</span></button>` : ""}</aside></div></div></section>`;
 }
 function directory(list = pages, search = false) {
   return `<section id="tools" class="tool-directory wrap"><div class="section-intro"><div><p class="eyebrow"><span></span>TOOL DIRECTORY</p><h2>${search ? "Find the right tool" : "Related calculators"}</h2></div>
   ${search ? '<div class="search-field"><label class="sr-only" for="tool-search">Search tools</label><span aria-hidden="true">⌕</span><input type="search" id="tool-search" placeholder="Search tools"></div>' : ""}</div>
-  <div class="tool-grid">${list.map((p)=>{const [name,desc,letter]=cards[p.mode];return `<a class="tool-card" data-search="${escape([p.short,p.title,p.kicker,desc].join(" ").toLowerCase())}" href="${url(p.path)}"><span class="tool-icon" aria-hidden="true">${letter}</span><span class="tool-name">${escape(name)} <span aria-hidden="true">→</span></span><span class="tool-description">${escape(desc)}</span></a>`;}).join("")}</div>${search ? '<p id="tool-search-status" role="status"></p>' : ""}</section>`;
+  <div class="tool-grid">${list.map((p)=>{const [name,desc,category]=cards[p.mode];return `<a class="tool-card" data-search="${escape([p.short,p.title,p.kicker,desc,category].join(" ").toLowerCase())}" href="${url(p.path)}"><span class="tool-category">${category}</span><span class="tool-name">${escape(name)} <span aria-hidden="true">→</span></span><span class="tool-description">${escape(desc)}</span></a>`;}).join("")}</div>${search ? '<p id="tool-search-status" role="status"></p>' : ""}</section>`;
 }
 function detail(page) {
   return `<section class="detail wrap" aria-label="Worked example and formula">
@@ -129,7 +143,10 @@ function infoMarkup(title, description, content) {
     <h1>${escape(title)}</h1><p class="lede">${escape(description)}</p>${content}</article>`;
 }
 const privacyText = `<h2>Calculator inputs</h2><p>Calculations run in your browser. If you choose to send a label estimate to the print-run planner, the number passes between pages through session storage and is cleared after use. A query-parameter fallback is used when session storage is unavailable.</p>
-<h2>Hosting and external links</h2><p>The hosting service may process ordinary request data to serve and protect the site. External sources have their own privacy policies. RollLedger uses no advertising scripts or site analytics.</p>`;
+<h2>Downloads</h2><p>CSV exports are created on your device from the calculator result. We recommend removing any internal order details before sharing an export or posting a question publicly.</p>
+<h2>Hosting and external links</h2><p>Vercel may process routine request information, including IP addresses and browser information, to deliver and protect the site. External links have their own privacy policies.</p>
+<h2>Advertising and analytics</h2><p>RollLedger currently runs without ad scripts or third-party analytics. Calculator inputs are processed in your browser. If advertising is introduced, this page will describe the provider’s cookies and data use and explain the available privacy controls.</p>
+<h2>Contact</h2><p>Use the <a href="/contact">contact page</a> for questions about this policy.</p>`;
 
 await mkdir(dist+"/assets",{recursive:true});
 await writeFile(dist+"/index.html",index);
@@ -147,10 +164,24 @@ for (const guide of guides) {
     markup:infoMarkup(title,description,body+references)+directory(tools.map((k)=>byMode[k]))+guideLinks(guides.filter((g)=>g.path!==path)),
     schema:[breadcrumbs(title,path),{"@type":"TechArticle","headline":title,"description":description,"url":origin+url(path),"mainEntityOfPage":origin+url(path),"inLanguage":"en","publisher":{"@type":"Organization","name":"RollLedger","url":origin+"/"},"citation":sources.map(([,href])=>href)}]}));
 }
-const privacyDescription = "How RollLedger handles calculator inputs and local browser storage.";
+const privacyDescription = "How RollLedger handles calculator data, browser storage, hosting and advertising.";
 await writeFile(dist+"/privacy.html",layout({path:"privacy",title:"Privacy",description:privacyDescription,indexable:false,markup:infoMarkup("Privacy",privacyDescription,privacyText)}));
 await writeFile(dist+"/404.html",layout({path:"404",title:"Page not found",description:"This RollLedger page could not be found.",indexable:false,markup:infoMarkup("Page not found","This page may have moved.",'<p><a class="button primary" href="/#tools">Browse calculators</a></p>')}));
-const publicPaths = ["",...pages.map((p)=>p.path),...guides.map((g)=>g.path)];
+const infoPages = [
+  ["about", "About RollLedger", "How RollLedger’s calculators estimate label stock and help plan a print run.",
+    '<h2>Tools for everyday label work</h2><p>RollLedger helps print shops and shipping desks estimate inventory, check roll dimensions, and allocate stock to a print job. Each calculator includes a worked example and the method it uses.</p><h2>How to use the estimates</h2><p>Use actual roll measurements and check counts for time-sensitive jobs. Winding tension and material vary across suppliers. The <a href="/method">measurement guide</a> explains how to choose and cross-check a method.</p><h2>Corrections</h2><p>Tell us when you find a calculation error or unclear instruction on the <a href="/contact">contact page</a>.</p>'],
+  ["contact", "Contact RollLedger", "Report a calculator issue or ask a question about RollLedger’s methods.",
+    '<h2>Report a calculator issue</h2><p>Use the <a href="https://github.com/sarthaksaini041/rollledger/issues">RollLedger issue tracker</a>. Include the calculator name, your units, and a sample using non-sensitive values. The tracker is public.</p><h2>Check the measurement method</h2><p>The <a href="/method">measurement guide</a> explains which diameters and stock values to enter. Each calculator lists assumptions and a worked example.</p>']
+];
+for (const [path,title,description,body] of infoPages) {
+  await writeFile(dist+"/"+path+".html",layout({path,title,description,markup:infoMarkup(title,description,body),schema:[breadcrumbs(title,path)]}));
+}
+if (publisherId && !isPreview) {
+  await writeFile(dist+"/ads.txt",`google.com, ${publisherId}, DIRECT, f08c47fec0942fa0\n`);
+} else {
+  await rm(dist+"/ads.txt",{force:true});
+}
+const publicPaths = ["",...pages.map((p)=>p.path),...guides.map((g)=>g.path),...infoPages.map(([path])=>path)];
 await writeFile(dist+"/robots.txt",isPreview ? "User-agent: *\nDisallow: /\n" : `User-agent: *\nAllow: /\nSitemap: ${origin}/sitemap.xml\n`);
 await writeFile(dist+"/sitemap.xml",`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${publicPaths.map((p)=>`  <url><loc>${escape(origin+url(p))}</loc></url>`).join("\n")}\n</urlset>\n`);
 for (const f of ["calculations.mjs","app.mjs","site.css","favicon.png","social.png"]) await copyFile(new URL(f,import.meta.url), dist+"/assets/"+f);

@@ -30,6 +30,20 @@ export const fields = {
     amount("buffer", "Extra job buffer", 5, "A percentage of the good labels required.", "%"),
     amount("setup", "Setup and test labels", 20, "Budget these in addition to the buffer.")
   ],
+  size: [
+    amount("target", "Target label count", 500, "The quantity you want on the finished roll."),
+    diameter("core", "Empty core outside diameter", 32, "Measure the outside of the bare core."),
+    diameter("thickness", "Combined caliper", 0.16, "Include the label, adhesive and liner."),
+    diameter("label", "Label length in feed direction", 50, "Measure in the direction the roll unwinds."),
+    diameter("gap", "Gap between labels", 3, "Use zero for continuous stock."),
+    amount("lanes", "Labels across the web", 1, "Side-by-side labels in each repeat.", "lanes"),
+    diameter("waste", "Unusable liner length", 0, "Include leaders and trailers in the final diameter.")
+  ],
+  batch: [
+    amount("job", "Good labels required", 950, "Usable labels the job needs."),
+    amount("buffer", "Extra job buffer", 5, "Percentage of good labels required.", "%"),
+    amount("setup", "Setup and test labels", 20, "A fixed allowance for calibration and tests.")
+  ],
   fit: [
     diameter("used", "Roll outside diameter", 100, "Measure across the roll through the center."),
     diameter("limit", "Printer max. roll diameter", 127, "Default example: Zebra ZD421 direct thermal."),
@@ -38,3 +52,5 @@ export const fields = {
     diameter("maxWidth", "Printer max. media width", 108, "Use the media width, as distinct from print width.")
   ]
 };
+
+export const defaultRolls = [180, 470, 540];
