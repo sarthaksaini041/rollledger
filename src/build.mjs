@@ -7,7 +7,7 @@ import { calculate } from "./calculations.mjs";
 
 const dist = fileURLToPath(new URL("../dist/", import.meta.url));
 const productionHost = process.env.VERCEL_PROJECT_PRODUCTION_URL;
-const configuredOrigin = process.env.SITE_ORIGIN || (productionHost ? "https://" + productionHost : "https://rollledger-xi.vercel.app");
+const configuredOrigin = process.env.SITE_ORIGIN || (productionHost ? "https://" + productionHost : "https://rollledger-tools.vercel.app");
 const parsedOrigin = new URL(configuredOrigin);
 if (!["https:", "http:"].includes(parsedOrigin.protocol) || parsedOrigin.username || parsedOrigin.password ||
     parsedOrigin.pathname !== "/" || parsedOrigin.search || parsedOrigin.hash) throw new Error("Set SITE_ORIGIN to a full origin.");
