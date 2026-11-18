@@ -26,23 +26,18 @@ const calculatorAsset = bundle("calculations","mjs",await readSource("calculatio
 const appAsset = bundle("app","mjs",(await readSource("app.mjs")).replace("./calculations.mjs","./"+calculatorAsset.file));
 const cssAsset = bundle("site","css",await readSource("site.css"));
 
-const isVercelProduction = !isPreview && (process.env.ROLLLEDGER_TELEMETRY === "1" || process.env.VERCEL_ENV === "production");
-const observability = isVercelProduction
-  ? JSON.parse(process.env.VERCEL_OBSERVABILITY_CLIENT_CONFIG || "{}")
-  : {};
-const standardAnalytics = isVercelProduction ? {scriptSrc:"/_vercel/insights/script.js"} : undefined;
-const standardSpeed = isVercelProduction ? {scriptSrc:"/_vercel/speed-insights/script.js"} : undefined;
+const observability = JSON.parse(process.env.VERCEL_OBSERVABILITY_CLIENT_CONFIG || "{}");
 const sameOriginPath = (path) => typeof path === "string" && /^\/[0-9a-z_./-]+$/i.test(path) && !path.startsWith("//");
-function trackingScript(config, endpointNames) {
-  if (!sameOriginPath(config?.scriptSrc)) return "";
-  const endpoints = endpointNames.filter(([key])=>sameOriginPath(config[key]))
-    .map(([key,attr])=>` data-${attr}="${config[key]}"`).join("");
-  return `<script defer src="${config.scriptSrc}"${endpoints}></script>`;
+function telemetryConfig(config, standard, endpoints) {
+  if (!sameOriginPath(config?.scriptSrc)) return {src:standard,dataset:{}};
+  return {src:config.scriptSrc,dataset:Object.fromEntries(endpoints.filter(key=>sameOriginPath(config[key])).map(key=>[key,config[key]]))};
 }
-const analyticsScript = trackingScript(observability.analytics ?? standardAnalytics,[["viewEndpoint","view-endpoint"],["eventEndpoint","event-endpoint"]]);
-const speedScript = trackingScript(observability.speedInsights ?? standardSpeed,[["endpoint","endpoint"]]);
-const telemetryMarkup = (analyticsScript || speedScript) ? `<script>
-  function rollledgerUrl(value) {
+const analytics = telemetryConfig(observability.analytics,"/_vercel/insights/script.js",["viewEndpoint","eventEndpoint"]);
+const speed = telemetryConfig(observability.speedInsights,"/_vercel/speed-insights/script.js",["endpoint"]);
+const telemetryMarkup = isPreview || process.env.ROLLLEDGER_TELEMETRY === "0" ? "" : `<script>
+(() => {
+  if (location.origin !== ${JSON.stringify(origin)}) return;
+  function cleanUrl(value) {
     if (typeof value !== "string" || !value) return value;
     try {
       const url = new URL(value, location.origin);
@@ -51,14 +46,21 @@ const telemetryMarkup = (analyticsScript || speedScript) ? `<script>
       return url.href;
     } catch { return ""; }
   }
-  function rollledgerVitals(event) {
-    return { ...event, url: rollledgerUrl(event.url), ...(event.referrer ? {referrer:rollledgerUrl(event.referrer)} : {}) };
+  function redact(event) {
+    return { ...event, url: cleanUrl(event.url), ...(event.referrer ? {referrer:cleanUrl(event.referrer)} : {}) };
   }
-  ${analyticsScript ? 'window.va = window.va || function () { (window.vaq = window.vaq || []).push(arguments); }; window.va("beforeSend", rollledgerVitals);' : ""}
-  ${speedScript ? 'window.si = window.si || function () { (window.siq = window.siq || []).push(arguments); }; window.si("beforeSend", rollledgerVitals);' : ""}
-</script>
-${analyticsScript}
-${speedScript}` : "";
+  function register(name, queue, config) {
+    window[name] = window[name] || function () { (window[queue] = window[queue] || []).push(arguments); };
+    window[name]("beforeSend", redact);
+    const script = document.createElement("script");
+    script.src = config.src;
+    Object.assign(script.dataset, config.dataset);
+    document.head.append(script);
+  }
+  register("va", "vaq", ${JSON.stringify(analytics)});
+  register("si", "siq", ${JSON.stringify(speed)});
+})();
+</script>`;
 const siteId = origin + "/#website";
 const organizationId = origin + "/#publisher";
 const byMode = Object.fromEntries(pages.map((page) => [page.mode, page]));
