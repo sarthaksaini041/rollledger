@@ -26,7 +26,7 @@ const calculatorAsset = bundle("calculations","mjs",await readSource("calculatio
 const appAsset = bundle("app","mjs",(await readSource("app.mjs")).replace("./calculations.mjs","./"+calculatorAsset.file));
 const cssAsset = bundle("site","css",await readSource("site.css"));
 
-const isVercelProduction = process.env.VERCEL_ENV === "production";
+const isVercelProduction = !isPreview && (process.env.ROLLLEDGER_TELEMETRY === "1" || process.env.VERCEL_ENV === "production");
 const observability = isVercelProduction
   ? JSON.parse(process.env.VERCEL_OBSERVABILITY_CLIENT_CONFIG || "{}")
   : {};
