@@ -136,7 +136,7 @@ h1,h2{font-family:var(--display);font-weight:500;margin:0;line-height:.98;letter
 .hero { padding-block: clamp(34px, 4.2vw, 58px) }
 .hero h1 { font-size: clamp(52px, 6.8vw, 102px) }
 .hero-actions .text-link, .topbar nav a { min-height:44px; display:inline-flex; align-items:center }
-.mode-switch { flex-wrap:wrap; overflow:visible }
+.mode-switch { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); overflow:visible }
 .mode-switch a { display:flex; align-items:center; justify-content:center; min-height:44px; text-align:center; line-height:1.2; white-space:normal }
 .form-head p { margin:0; font-size:14px; line-height:1.45 }
 .units label span { min-width:36px; padding:8px 6px }
@@ -179,8 +179,9 @@ h1,h2{font-family:var(--display);font-weight:500;margin:0;line-height:.98;letter
   .calc-section { padding-top:20px }
   .section-intro h2 { font-size:clamp(30px,7vw,44px); line-height:1.05 }
   .section-intro .guidance { white-space:nowrap; min-height:36px }
-  .mode-switch { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:4px; padding:6px }
-  .mode-switch a { padding:6px; font-size:12px }
+  .mode-switch { grid-template-columns:repeat(6,minmax(0,1fr)); gap:4px; padding:6px }
+  .mode-switch a { grid-column:span 2; padding:6px; font-size:12px }
+  .mode-switch a:nth-last-child(-n+2) { grid-column:span 3 }
   .tool-directory { margin-block:36px 42px }
   .subhero { padding-block:19px 25px }
   .crumb { margin-bottom:20px }
