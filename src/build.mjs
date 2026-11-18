@@ -26,9 +26,12 @@ const calculatorAsset = bundle("calculations","mjs",await readSource("calculatio
 const appAsset = bundle("app","mjs",(await readSource("app.mjs")).replace("./calculations.mjs","./"+calculatorAsset.file));
 const cssAsset = bundle("site","css",await readSource("site.css"));
 
-const observability = process.env.VERCEL_ENV === "production" && process.env.VERCEL_OBSERVABILITY_CLIENT_CONFIG
-  ? JSON.parse(process.env.VERCEL_OBSERVABILITY_CLIENT_CONFIG)
+const isVercelProduction = process.env.VERCEL_ENV === "production";
+const observability = isVercelProduction
+  ? JSON.parse(process.env.VERCEL_OBSERVABILITY_CLIENT_CONFIG || "{}")
   : {};
+const standardAnalytics = isVercelProduction ? {scriptSrc:"/_vercel/insights/script.js"} : undefined;
+const standardSpeed = isVercelProduction ? {scriptSrc:"/_vercel/speed-insights/script.js"} : undefined;
 const sameOriginPath = (path) => typeof path === "string" && /^\/[0-9a-z_./-]+$/i.test(path) && !path.startsWith("//");
 function trackingScript(config, endpointNames) {
   if (!sameOriginPath(config?.scriptSrc)) return "";
@@ -36,8 +39,8 @@ function trackingScript(config, endpointNames) {
     .map(([key,attr])=>` data-${attr}="${config[key]}"`).join("");
   return `<script defer src="${config.scriptSrc}"${endpoints}></script>`;
 }
-const analyticsScript = trackingScript(observability.analytics,[["viewEndpoint","view-endpoint"],["eventEndpoint","event-endpoint"]]);
-const speedScript = trackingScript(observability.speedInsights,[["endpoint","endpoint"]]);
+const analyticsScript = trackingScript(observability.analytics ?? standardAnalytics,[["viewEndpoint","view-endpoint"],["eventEndpoint","event-endpoint"]]);
+const speedScript = trackingScript(observability.speedInsights ?? standardSpeed,[["endpoint","endpoint"]]);
 const telemetryMarkup = (analyticsScript || speedScript) ? `<script>
   function rollledgerUrl(value) {
     if (typeof value !== "string" || !value) return value;
